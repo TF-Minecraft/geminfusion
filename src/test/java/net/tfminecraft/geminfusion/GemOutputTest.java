@@ -25,7 +25,7 @@ class GemOutputTest {
   InfusionMain previous;
   MMOItems previousMmo;
   io.lumine.mythic.lib.MythicLib previousLib;
-  AttributeInfluence previousInfusion, previousJewelry;
+  java.util.function.IntSupplier previousDie;
   MockedStatic<NBTItem> nbtApi;
   NBTItem nbt;
   Gemstone gem;
@@ -46,10 +46,8 @@ class GemOutputTest {
     MMOItems.plugin = mock(MMOItems.class, RETURNS_DEEP_STUBS);
     when(MMOItems.plugin.namespace()).thenReturn("mmoitems");
     when(io.lumine.mythic.lib.MythicLib.plugin.namespace()).thenReturn("mythiclib");
-    previousInfusion = AttributeInfluence.infusion;
-    previousJewelry = AttributeInfluence.jewelry;
-    AttributeInfluence.infusion = mock(AttributeInfluence.class);
-    AttributeInfluence.jewelry = mock(AttributeInfluence.class);
+    previousDie = D20Roll.die;
+    D20Roll.load(null);
     nbt = mock(NBTItem.class);
     nbtApi = mockStatic(NBTItem.class);
     nbtApi.when(() -> NBTItem.get(any(ItemStack.class))).thenReturn(nbt);
@@ -76,8 +74,8 @@ class GemOutputTest {
     io.lumine.mythic.lib.MythicLib.plugin = previousLib;
     InfusionMain.plugin = previous;
     MMOItems.plugin = previousMmo;
-    AttributeInfluence.infusion = previousInfusion;
-    AttributeInfluence.jewelry = previousJewelry;
+    D20Roll.die = previousDie;
+    D20Roll.load(null);
     ConfigLoader.loadedGems.clear();
     MockBukkit.unmock();
   }
@@ -112,20 +110,28 @@ class GemOutputTest {
   }
 
   @Test
-  void statRollUsesMatchingRarityAndAttributeThenClampsSuccessRange() throws Exception {
+  void statRollUsesMatchingRarityAndTheD20ThenClampsSuccessRange() throws Exception {
     gem.addStat(stat("other", "ATTACK_DAMAGE", 9));
-    gem.addStat(stat("rare", "ATTACK_DAMAGE", 2));
+    gem.addStat(GemStat.parse("ruby", "rare", config("stat: ATTACK_DAMAGE\nmin: 1\nmax: 2")));
     MMOItem output = mock(MMOItem.class);
-    when(AttributeInfluence.infusion.forPlayer(player)).thenReturn(.25);
-    InfusedGemBuilder.rollStats(output, gem, rarity, 100, player);
     var value = ArgumentCaptor.forClass(DoubleData.class);
-    verify(output).setData(eq(ItemStats.ATTACK_DAMAGE), value.capture());
-    assertEquals(2.5, value.getValue().getValue());
-    verify(output)
+    // The rare range 1-2 spreads to 0.8-2.4: a natural 20 is the Flawless top, a natural 1 the bottom,
+    // and a 10 with no modifier (no MMOCore here) lands 9/19 of the way up.
+    D20Roll.die = () -> 20;
+    InfusedGemBuilder.rollStats(output, gem, rarity, 100, player);
+    D20Roll.die = () -> 1;
+    InfusedGemBuilder.rollStats(output, gem, rarity, 100, player);
+    D20Roll.die = () -> 10;
+    InfusedGemBuilder.rollStats(output, gem, rarity, 100, player);
+    verify(output, times(3)).setData(eq(ItemStats.ATTACK_DAMAGE), value.capture());
+    assertEquals(
+        List.of(2.4, 0.8, 1.5579),
+        value.getAllValues().stream().map(DoubleData::getValue).toList());
+    verify(output, times(3))
         .setData(eq(ItemStats.SUCCESS_RATE), argThat(v -> ((DoubleData) v).getValue() == 40));
     gem.setStats(new ArrayList<>());
     InfusedGemBuilder.rollStats(output, gem, rarity, 1, player);
-    verify(output, times(2)).setData(eq(ItemStats.SUCCESS_RATE), any());
+    verify(output, times(4)).setData(eq(ItemStats.SUCCESS_RATE), any());
     gem.addStat(stat("rare", "MISSING", 1));
     when(MMOItems.plugin.getStats().get("MISSING")).thenReturn(null);
     InfusedGemBuilder.rollStats(output, gem, rarity, 1, player);
@@ -313,7 +319,8 @@ class GemOutputTest {
     when(station.getHitPercent()).thenReturn(80.0);
     when(project.getItem()).thenReturn("m.ring");
     when(project.getTierMultiplier()).thenReturn(.5);
-    when(AttributeInfluence.jewelry.forPlayer(player)).thenReturn(.2);
+    // A natural 20 craft roll gives the top +20%.
+    D20Roll.die = () -> 20;
     gem.addStat(stat("other", "MISSING", 3));
     gem.addStat(stat("rare", "ATTACK_DAMAGE", 10));
     GemRarityPdc.write(gemItem, "rare");
@@ -350,6 +357,7 @@ class GemOutputTest {
       assertEquals(80, result.getHitPercent());
       assertEquals(50, result.getStatCarryPercent());
       assertSame(quality, result.getQuality());
+      assertTrue(result.getCraftRoll().isCritical());
       assertEquals(0, original.getValue());
       verify(constructed.constructed().getLast())
           .setData(
@@ -359,6 +367,95 @@ class GemOutputTest {
           .registerExternalData(argThat(v -> v instanceof DoubleData d && d.getValue() == 3.0));
     } finally {
       GoldsmithCache.jewelryGemStatBoostChances = boostChances;
+    }
+  }
+
+  @Test
+  void masterworkNeedsPerfectWorkAFlawlessGemAndACraftRollAtTheDc() throws Exception {
+    var boostChances = GoldsmithCache.jewelryGemStatBoostChances;
+    GoldsmithCache.jewelryGemStatBoostChances = Map.of();
+    GoldsmithStation station = mock(GoldsmithStation.class);
+    JewelryProject project = mock(JewelryProject.class);
+    when(project.requiresGem()).thenReturn(true);
+    ItemStack gemItem = tagged(Material.DIAMOND),
+        base = tagged(Material.GOLD_INGOT),
+        out = tagged(Material.GOLD_INGOT);
+    when(station.getProject()).thenReturn(project);
+    when(station.getGem()).thenReturn(gemItem);
+    when(station.getRecipePercent()).thenReturn(100.0);
+    when(station.getHitPercent()).thenReturn(100.0);
+    when(project.getItem()).thenReturn("m.ring");
+    when(project.getTierMultiplier()).thenReturn(1.0);
+    // Rare 2-3 spreads to 1.6-3.6, so only 3.6 is Flawless; epic and a different stat never match it.
+    gem.addStat(GemStat.parse("ruby", "legendary", config("stat: OTHER\nmin: 3\nmax: 3")));
+    gem.addStat(GemStat.parse("ruby", "epic", config("stat: ATTACK_DAMAGE\nmin: 3\nmax: 4")));
+    gem.addStat(GemStat.parse("ruby", "rare", config("stat: ATTACK_DAMAGE\nmin: 2\nmax: 3")));
+    when(MMOItems.plugin.getStats().get("OTHER")).thenReturn(null);
+    GemRarityPdc.write(gemItem, "rare");
+    ItemAPI api = mock(ItemAPI.class, RETURNS_DEEP_STUBS);
+    when(api.getCreator().getItemFromPath("m.ring")).thenReturn(base);
+    Quality masterwork = mock(Quality.class), gleaming = mock(Quality.class);
+    when(gleaming.getStatMax()).thenReturn(65.0);
+    double[] gemValue = {3.6};
+    int dc = D20Roll.masterworkDc;
+    try (var libs = mockStatic(TLibs.class);
+        var valid = mockStatic(InfusedGemValidator.class);
+        var qualityApi = mockStatic(QualityLoader.class);
+        var constructed =
+            live(
+                m -> {
+                  when(m.getData(ItemStats.ATTACK_DAMAGE))
+                      .thenAnswer(i -> new DoubleData(gemValue[0]));
+                  when(m.getStats()).thenReturn(Set.of(ItemStats.ATTACK_DAMAGE));
+                  when(m.newBuilder().build()).thenReturn(out);
+                })) {
+      libs.when(TLibs::getItemAPI).thenReturn(api);
+      valid.when(() -> InfusedGemValidator.isInfused(gemItem)).thenReturn(true);
+      qualityApi.when(() -> QualityLoader.getByAmount(100)).thenReturn(masterwork);
+      qualityApi.when(() -> QualityLoader.resolveStatFactor(100)).thenReturn(100.0);
+      qualityApi.when(() -> QualityLoader.below(masterwork)).thenReturn(gleaming);
+      // Each craft: the quality, the stat carry and the stat written to the jewelry.
+      record Craft(Quality quality, double carry, double stat) {}
+      java.util.function.Supplier<Craft> craft =
+          () -> {
+            JewelryCraftResult r = JewelryOutput.build(station, player);
+            var written = ArgumentCaptor.forClass(DoubleData.class);
+            // The original is zeroed first, then the crafted stat is written.
+            verify(constructed.constructed().getLast(), times(2))
+                .setData(eq(ItemStats.ATTACK_DAMAGE), written.capture());
+            return new Craft(r.getQuality(), r.getStatCarryPercent(), written.getValue().getValue());
+          };
+      // Flawless gem, natural 20: Masterwork at the absolute max, 3.6 x 100% x 1.2.
+      D20Roll.die = () -> 20;
+      assertEquals(new Craft(masterwork, 100, 4.32), craft.get());
+      // A total at the DC without a natural 20 still gets the full +20%.
+      D20Roll.masterworkDc = 15;
+      D20Roll.die = () -> 16;
+      assertEquals(new Craft(masterwork, 100, 4.32), craft.get());
+      // Flawless gem, natural 1: Gleaming at its top carry, then -20%.
+      D20Roll.die = () -> 1;
+      assertEquals(new Craft(gleaming, 65, 1.872), craft.get());
+      // A gem below the top can never make a Masterwork, even on a natural 20.
+      gemValue[0] = 3.5;
+      D20Roll.die = () -> 20;
+      assertEquals(new Craft(gleaming, 65, 2.73), craft.get());
+      // With no tier below, perfect work keeps its tier.
+      qualityApi.when(() -> QualityLoader.below(masterwork)).thenReturn(null);
+      assertEquals(new Craft(masterwork, 100, 4.2), craft.get());
+      qualityApi.when(() -> QualityLoader.below(masterwork)).thenReturn(gleaming);
+      // A reset gem with no stored rarity is checked against every rarity of its gem.
+      ItemStack reset = tagged(Material.DIAMOND);
+      when(station.getGem()).thenReturn(reset);
+      valid.when(() -> InfusedGemValidator.isInfused(reset)).thenReturn(true);
+      gemValue[0] = 3.6;
+      assertEquals(new Craft(masterwork, 100, 4.32), craft.get());
+      // A gem that is no longer configured cannot be Flawless.
+      ConfigLoader.loadedGems.clear();
+      assertEquals(new Craft(gleaming, 65, 2.808), craft.get());
+    } finally {
+      D20Roll.masterworkDc = dc;
+      GoldsmithCache.jewelryGemStatBoostChances = boostChances;
+      ConfigLoader.loadedGems.add(gem);
     }
   }
 

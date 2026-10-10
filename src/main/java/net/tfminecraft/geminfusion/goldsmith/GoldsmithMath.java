@@ -141,10 +141,6 @@ public final class GoldsmithMath {
 		return Math.min(capPercent(recipePercent), capPercent(hitPercent));
 	}
 
-	public static boolean meetsMinHitPercent(double hitPercent) {
-		return capPercent(hitPercent) >= GoldsmithCache.minHitPercent * 100.0;
-	}
-
 	private static double lineHitPercentage(int current, int needed) {
 		return Math.round((double) current / needed * 100.0);
 	}

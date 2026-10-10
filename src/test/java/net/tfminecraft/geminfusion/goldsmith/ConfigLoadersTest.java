@@ -101,6 +101,10 @@ class ConfigLoadersTest {
     assertEquals(type.getName(), GoldsmithMaterialTypeLoader.display(type.getId()));
     assertEquals(100, QualityLoader.resolveStatFactor(100));
     assertEquals(100, QualityLoader.resolveStatFactor(150));
+    // A perfect piece that misses a Masterwork drops to the tier below it.
+    assertSame(QualityLoader.getByString("epic"), QualityLoader.below(QualityLoader.getByString("legendary")));
+    assertNull(QualityLoader.below(QualityLoader.getByString("crude")));
+    assertNull(QualityLoader.below(null));
     for (Quality q : QualityLoader.get().values()) {
       assertEquals(q, QualityLoader.getByString(q.getId()));
       assertNotNull(q.getName());
@@ -310,9 +314,6 @@ class ConfigLoadersTest {
     GoldsmithConfigLoader loader = new GoldsmithConfigLoader();
     loader.load(yaml("{}"));
     assertNull(GoldsmithCache.permission);
-    assertEquals(.4, GoldsmithCache.minHitPercent);
-    assertEquals(30, GoldsmithCache.hitOvershootWarnPercent);
-    assertEquals("§cYou have worked this piece too much", GoldsmithCache.hitOvershootWarnMessage);
     assertEquals(10, GoldsmithCache.jewelryGemStatBoost);
     assertEquals(5, GoldsmithCache.jewelryGemStatBoostChance("common"));
     assertEquals(15, GoldsmithCache.jewelryGemStatBoostChance("RARE"));
@@ -320,16 +321,13 @@ class ConfigLoadersTest {
     assertEquals(50, GoldsmithCache.jewelryGemStatBoostChance("legendary"));
     assertEquals(0, GoldsmithCache.jewelryGemStatBoostChance("unknown"));
     assertEquals(0, GoldsmithCache.jewelryGemStatBoostChance(null));
-    loader.load(yaml("permission: ' '\nhit-overshoot-warn-message: ' '\n"));
+    loader.load(yaml("permission: ' '\n"));
     assertNull(GoldsmithCache.permission);
     loader.load(
         yaml(
             "station: table\n"
                 + "branding-tool: branding\n"
                 + "permission: smith\n"
-                + "min-hit-percent: 0.6\n"
-                + "hit-overshoot-warn-percent: 50\n"
-                + "hit-overshoot-warn-message: Overworked\n"
                 + "jewelry-gem-stat-boost:\n"
                 + "  amount: 12\n"
                 + "  chances:\n"
@@ -338,9 +336,6 @@ class ConfigLoadersTest {
     assertEquals("table", GoldsmithCache.station);
     assertEquals("branding", GoldsmithCache.brandingTool);
     assertEquals("smith", GoldsmithCache.permission);
-    assertEquals(.6, GoldsmithCache.minHitPercent);
-    assertEquals(50, GoldsmithCache.hitOvershootWarnPercent);
-    assertEquals("Overworked", GoldsmithCache.hitOvershootWarnMessage);
     assertEquals(12, GoldsmithCache.jewelryGemStatBoost);
     assertEquals(0, GoldsmithCache.jewelryGemStatBoostChance("common"));
     assertEquals(100, GoldsmithCache.jewelryGemStatBoostChance("legendary"));

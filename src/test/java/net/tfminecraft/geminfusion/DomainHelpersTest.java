@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.util.*;
-import net.Indyuce.mmocore.api.player.PlayerData;
 import net.Indyuce.mmoitems.MMOItems;
 import net.Indyuce.mmoitems.api.item.mmoitem.MMOItem;
 import net.tfminecraft.geminfusion.goldsmith.GoldsmithLog;
@@ -72,50 +71,6 @@ class DomainHelpersTest {
       verify(logger).warning(anyString());
     } finally {
       InfusionMain.plugin = previous;
-    }
-  }
-
-  @Test
-  void attributeCurveInterpolatesAndRejectsInvalidThresholdOrdering() throws Exception {
-    assertEquals(0, AttributeInfluence.disabled().delta(9));
-    assertEquals(0, AttributeInfluence.from(null, null).delta(9));
-    assertEquals(0, AttributeInfluence.from(null, "dexterity").delta(9));
-    AttributeInfluence curve =
-        AttributeInfluence.from(
-            config("floor: 0\nneutral: 10\nfull: 20\nmax-bonus: 0.4\nmax-penalty: 0.2"),
-            "intelligence");
-    assertEquals(-.2, curve.delta(-1));
-    assertEquals(-.2, curve.delta(0));
-    assertEquals(-.1, curve.delta(5), .00001);
-    assertEquals(0, curve.delta(10));
-    assertEquals(.2, curve.delta(15), .00001);
-    assertEquals(.4, curve.delta(20));
-    assertEquals(.4, curve.delta(100));
-    assertEquals(
-        0, AttributeInfluence.from(config("floor: 0\nneutral: 10\nfull: 5"), null).delta(4));
-    assertEquals(
-        0, AttributeInfluence.from(config("floor: 10\nneutral: 0\nfull: 20"), null).delta(4));
-  }
-
-  @Test
-  void attributeLookupHandlesAbsentPluginPlayerInvalidIdAndIntegrationFailures() throws Exception {
-    var server = MockBukkit.mock();
-    Player player = server.addPlayer();
-    AttributeInfluence influence =
-        AttributeInfluence.from(config("mmocore-id: dexterity"), "intelligence");
-    assertEquals(0, influence.readAttribute(null));
-    assertEquals(0, influence.readAttribute(player));
-    assertEquals(0, AttributeInfluence.from(config("{}"), null).readAttribute(player));
-    assertEquals(0, AttributeInfluence.from(config("mmocore-id: ' '"), " ").readAttribute(player));
-    MockBukkit.createMockPlugin("MMOCore");
-    try (var data = mockStatic(PlayerData.class)) {
-      data.when(() -> PlayerData.get(player)).thenThrow(new IllegalStateException("unavailable"));
-      assertEquals(0, influence.readAttribute(player));
-      PlayerData record = mock(PlayerData.class, RETURNS_DEEP_STUBS);
-      when(record.getAttributes().getInstance("dexterity").getTotal()).thenReturn(15);
-      data.when(() -> PlayerData.get(player)).thenReturn(record);
-      assertEquals(15, influence.readAttribute(player));
-      assertEquals(.1, influence.forPlayer(player), .00001);
     }
   }
 

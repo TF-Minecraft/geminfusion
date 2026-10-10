@@ -42,11 +42,9 @@ public final class InfusedGemBuilder {
 				warn("Unknown MMOItems stat '" + block.getStatId() + "' on gem '" + gem.getId()
 						+ "' rarity '" + rarity.getId() + "', skipping stat write.");
 			} else {
-				double minAmount = 10000 * block.getMin();
-				double maxAmount = 10000 * block.getMax();
-				double statAmount = Math.floor(Math.random() * (maxAmount - minAmount) + minAmount) / 10000;
-				double delta = AttributeInfluence.infusion.forPlayer(player);
-				statAmount = Math.floor(statAmount * (1.0 + delta) * 10000) / 10000;
+				// d20 + Intelligence picks the spot in the rarity's spread; the DC or a natural 20 makes it Flawless.
+				D20Roll roll = D20Roll.roll(player, D20Roll.infusionAttribute);
+				double statAmount = D20Roll.gemStat(block, roll.position(D20Roll.flawlessDc));
 				mmo.setData(stat, new DoubleData(statAmount));
 			}
 		}

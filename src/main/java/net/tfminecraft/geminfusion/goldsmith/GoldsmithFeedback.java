@@ -6,7 +6,6 @@ public enum GoldsmithFeedback {
 	WRONG_TYPE,
 	NONE,
 	LACKING_ITEMS,
-	LACKING_HITS,
 	RUINED,
 	NO_PROJECT,
 	NOT_INFUSED

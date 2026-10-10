@@ -167,8 +167,7 @@ public final class GoldsmithStationStore {
 		Location loc = GoldsmithStationManager.key(new Location(world, data.x, data.y, data.z));
 		GoldsmithStation station = new GoldsmithStation(loc);
 		station.setProject(project);
-		station.applySavedProgress(data.materials, data.hits, decodeItems(data.deposited), decodeItem(data.gem),
-				data.overworkWarned);
+		station.applySavedProgress(data.materials, data.hits, decodeItems(data.deposited), decodeItem(data.gem));
 		return station;
 	}
 
@@ -191,7 +190,6 @@ public final class GoldsmithStationStore {
 		}
 		data.deposited = encodeItems(station.getDeposited());
 		data.gem = encodeItem(station.getGem());
-		data.overworkWarned = station.isOverworkWarned();
 		return data;
 	}
 
@@ -253,6 +251,5 @@ public final class GoldsmithStationStore {
 		Map<String, Integer> hits = new HashMap<>();
 		List<String> deposited = new ArrayList<>();
 		String gem;
-		boolean overworkWarned;
 	}
 }

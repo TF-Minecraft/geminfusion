@@ -8,13 +8,6 @@ branding-tool: m.tools.goldsmith_branding_tool
 # geminfusion.admin always bypasses. This plugin does not grant the node.
 permission: professions.goldsmith
 
-# Minimum fraction of required hits (from deposited materials) to allow branding finish.
-min-hit-percent: 0.40
-
-# Once-per-bench hint when total swings exceed needed hits by this percent. 0 disables it.
-hit-overshoot-warn-percent: 30.0
-hit-overshoot-warn-message: "§cYou have worked this piece too much"
-
 # An infused gem can occasionally improve the jewelry's stat beyond the craft-quality result.
 # Chance is a percentage; higher infused-gem rarity gives a higher chance. The bonus adds to
 # the craft stat factor and is capped at 100%.

@@ -42,8 +42,7 @@ public class ConfigLoader {
 		for(String key : rarityList) {
 			loadedRarities.add(new GemRarity(key, config.getConfigurationSection("rarities."+key)));
 		}
-		AttributeInfluence.infusion = AttributeInfluence.from(config.getConfigurationSection("attribute-influence"), "intelligence");
-		AttributeInfluence.jewelry = AttributeInfluence.from(config.getConfigurationSection("jewelry-attribute-influence"), "dexterity");
+		D20Roll.load(config.getConfigurationSection("d20"));
 	}
 	// Keep the existing legacy text representation, formatting, and exact-string comparisons.
 	@SuppressWarnings("deprecation")

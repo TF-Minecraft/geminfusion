@@ -8,7 +8,8 @@ GemInfusion gives gemstones rolled bonuses and turns them into a resource for eq
 
 - **Gem infusion** — process batches of gemstones using an infusion token, with station feedback as the infusion runs.
 - **Rarity and stat rolls** — gems range from common to legendary and provide bonuses such as health, armour, damage, or damage reduction according to their type.
-- **Character influence** — Intelligence affects an infused gem's rolled stat, while Dexterity separately influences the bonus carried into jewellery.
+- **d20 rolls** — like `/roll`, a d20 plus a modifier from the player's base attribute. Intelligence sets where an infused gem's stat lands, and Dexterity sets a craft roll that adjusts the jewellery stat. A natural 20 always gives the best result and a natural 1 the worst.
+- **Masterworks** — need a perfect recipe and hits, a Flawless gem (one that rolled the top of its range) and a craft roll of 20 or more, so every Masterwork has the highest stat possible.
 - **Socketed equipment** — connects gems with MMOItems sockets and preserves rarity information through socketing and removal.
 - **Goldsmithing projects** — craft rings, necklaces, medals, and other pieces from metals and infused gems, or make gem-free items such as the Golden Key.
 - **Craftsmanship matters** — recipe accuracy, tool work, project tier, and finishing quality shape how much of the gem's bonus reaches the finished piece.

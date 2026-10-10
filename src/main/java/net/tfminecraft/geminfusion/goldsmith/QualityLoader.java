@@ -55,6 +55,16 @@ public class QualityLoader {
 		return clamp(factor, tier.getStatMin(), tier.getStatMax());
 	}
 
+	/** The tier just below the given one, or null for the lowest or an unknown tier. */
+	public static Quality below(Quality quality) {
+		if (quality == null) return null;
+		Quality below = null;
+		for (Quality candidate : sortedByValue) {
+			if (candidate.getValue() < quality.getValue()) below = candidate;
+		}
+		return below;
+	}
+
 	private static Quality getByValue(int value) {
 		for (Quality quality : sortedByValue) {
 			if (quality.getValue() == value) {

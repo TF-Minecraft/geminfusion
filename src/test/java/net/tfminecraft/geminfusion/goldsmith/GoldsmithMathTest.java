@@ -123,18 +123,9 @@ class GoldsmithMathTest {
   }
 
   @Test
-  void finishUsesWeakerComponentAndMinimumThresholdIsInclusive() {
-    double old = GoldsmithCache.minHitPercent;
-    try {
-      GoldsmithCache.minHitPercent = .6;
-      assertEquals(40, GoldsmithMath.finishedTotal(80, 40));
-      assertEquals(100, GoldsmithMath.finishedTotal(150, 200));
-      assertEquals(0, GoldsmithMath.finishedTotal(-1, 50));
-      assertFalse(GoldsmithMath.meetsMinHitPercent(59));
-      assertTrue(GoldsmithMath.meetsMinHitPercent(60));
-      assertTrue(GoldsmithMath.meetsMinHitPercent(120));
-    } finally {
-      GoldsmithCache.minHitPercent = old;
-    }
+  void finishUsesWeakerComponent() {
+    assertEquals(40, GoldsmithMath.finishedTotal(80, 40));
+    assertEquals(100, GoldsmithMath.finishedTotal(150, 200));
+    assertEquals(0, GoldsmithMath.finishedTotal(-1, 50));
   }
 }

@@ -9,8 +9,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import io.lumine.mythic.lib.api.item.NBTItem;
-import net.tfminecraft.geminfusion.AttributeInfluence;
 import net.tfminecraft.geminfusion.ConfigLoader;
+import net.tfminecraft.geminfusion.D20Roll;
 import net.tfminecraft.geminfusion.GemRarityPdc;
 import net.tfminecraft.geminfusion.GemStat;
 import net.tfminecraft.geminfusion.Gemstone;
@@ -55,14 +55,26 @@ public final class JewelryOutput {
 		double finishedTotal = GoldsmithMath.finishedTotal(recipePct, hitPct);
 		Quality quality = QualityLoader.getByAmount(finishedTotal);
 		double statCarry = QualityLoader.resolveStatFactor(finishedTotal);
+		D20Roll craftRoll = D20Roll.roll(player, D20Roll.goldsmithAttribute);
+		// Perfect work alone is not a Masterwork: it also needs a Flawless gem and a craft roll that meets the DC.
+		// Then every Masterwork of a piece and gem has the highest stat there is.
+		boolean perfect = finishedTotal >= 100;
+		boolean masterwork = perfect && isFlawless(gemStack, roll) && craftRoll.meets(D20Roll.masterworkDc);
+		if (perfect && !masterwork) {
+			Quality below = QualityLoader.below(quality);
+			if (below != null) {
+				quality = below;
+				statCarry = below.getStatMax();
+			}
+		}
 		String gemRarity = GemRarityPdc.read(gemStack);
 		statCarry = GoldsmithCache.applyJewelryGemStatBoost(
 				statCarry, gemRarity, ThreadLocalRandom.current().nextDouble(100));
 
 		double projectMult = project.getTierMultiplier();
 		double qualityMult = statCarry / 100.0;
-		double attributeMult = 1.0 + AttributeInfluence.jewelry.forPlayer(player);
-		double amount = Math.floor(roll.value * projectMult * qualityMult * attributeMult * 10000) / 10000;
+		double rollMult = 1.0 + (masterwork ? D20Roll.maxPercent : craftRoll.statPercent()) / 100.0;
+		double amount = Math.floor(roll.value * projectMult * qualityMult * rollMult * 10000) / 10000;
 
 		ItemStack base = baseItem(project);
 		if (base == null) return null;
@@ -81,7 +93,7 @@ public final class JewelryOutput {
 		}
 		out.setAmount(1);
 		GoldsmithProvenance.stamp(out, station.getDepositedByMaterial());
-		return new JewelryCraftResult(out, recipePct, hitPct, finishedTotal, statCarry, quality);
+		return new JewelryCraftResult(out, recipePct, hitPct, finishedTotal, statCarry, quality, craftRoll);
 	}
 
 	/** Gem-free projects (e.g. keys) give the configured item as is: no stat, no quality. */
@@ -110,6 +122,22 @@ public final class JewelryOutput {
 		List<String> loreList = new ArrayList<>();
 		loreList.add("§fQuality: " + quality.getName());
 		mmo.setData(ItemStats.LORE, new StringListData(loreList));
+	}
+
+	/**
+	 * A gem is Flawless when its stat sits at the very top of its rarity's spread. Gems from before d20 infusion
+	 * never land there exactly. Reset gems with no stored rarity are checked against every rarity of their gem.
+	 */
+	private static boolean isFlawless(ItemStack gemStack, StatRoll roll) {
+		NBTItem nbt = NBTItem.get(gemStack);
+		Gemstone gem = ConfigLoader.findGemByMmoItem(nbt.getType(), nbt.getString("MMOITEMS_ITEM_ID"));
+		if (gem == null) return false;
+		String rarityId = GemRarityPdc.read(gemStack);
+		for (GemStat block : gem.getStats()) {
+			if (rarityId != null && !block.getId().equalsIgnoreCase(rarityId)) continue;
+			if (block.getStatId().equalsIgnoreCase(roll.statId) && D20Roll.isTop(block, roll.value)) return true;
+		}
+		return false;
 	}
 
 	private static StatRoll readGemStat(ItemStack gemStack) {

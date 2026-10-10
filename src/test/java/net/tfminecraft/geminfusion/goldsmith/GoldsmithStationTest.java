@@ -15,25 +15,14 @@ class GoldsmithStationTest {
   private final GoldsmithMaterial material = mock(GoldsmithMaterial.class);
   private final GoldsmithHit hit = mock(GoldsmithHit.class);
   private final GoldsmithHitType type = mock(GoldsmithHitType.class);
-  private double oldMinimum, oldWarning;
 
   @BeforeEach
   void setup() {
-    oldMinimum = GoldsmithCache.minHitPercent;
-    oldWarning = GoldsmithCache.hitOvershootWarnPercent;
-    GoldsmithCache.minHitPercent = .5;
-    GoldsmithCache.hitOvershootWarnPercent = 50;
     when(project.getMaterialsByType()).thenReturn(Map.of("gold", 1));
     when(project.getRecipe()).thenReturn(Map.of(material, 1));
     when(material.getType()).thenReturn("gold");
     when(material.getHits()).thenReturn(Map.of(hit, 2));
     when(hit.getType()).thenReturn(type);
-  }
-
-  @AfterEach
-  void restore() {
-    GoldsmithCache.minHitPercent = oldMinimum;
-    GoldsmithCache.hitOvershootWarnPercent = oldWarning;
   }
 
   private ItemStack stack() {
@@ -62,7 +51,6 @@ class GoldsmithStationTest {
     assertEquals(GoldsmithFeedback.NO_PROJECT, station.canFinish());
     assertEquals(0, station.getRecipePercent());
     assertEquals(0, station.getFinishedTotal());
-    assertFalse(station.markOverworkWarnedIfNeeded());
     station.setProject(project);
     assertTrue(station.hasProject());
     assertSame(project, station.getProject());
@@ -132,31 +120,33 @@ class GoldsmithStationTest {
   }
 
   @Test
-  void hitProgressOverworkAndThresholdsFollowDepositedMaterials() {
+  void anyHitCountCanBeFinishedAndOnlyChangesTheHitPercent() {
     ready();
-    assertEquals(GoldsmithFeedback.LACKING_HITS, station.canFinish());
-    assertEquals(GoldsmithFeedback.WRONG_TYPE, station.hit(null));
-    assertEquals(GoldsmithFeedback.WRONG_TYPE, station.hit(mock(GoldsmithHit.class)));
-    assertFalse(station.markOverworkWarnedIfNeeded());
-    assertEquals(GoldsmithFeedback.SUCCESS, station.hit(hit));
-    assertEquals(50, station.getHitPercent());
-    assertEquals(50, station.getFinishedTotal());
-    assertEquals(GoldsmithFeedback.RUINED, station.canFinish());
-    station.hit(hit);
-    assertEquals(100, station.getHitPercent());
-    station.hit(hit);
-    assertFalse(station.markOverworkWarnedIfNeeded());
-    station.hit(hit);
-    assertTrue(station.markOverworkWarnedIfNeeded());
-    assertTrue(station.isOverworkWarned());
-    assertFalse(station.markOverworkWarnedIfNeeded());
-    assertEquals(4, station.getTotalHitCount());
-    assertEquals(4, station.getHitTypes().get(type).getCurrent());
-    assertEquals(GoldsmithFeedback.LACKING_HITS, station.canFinish());
-    station.cancel();
-    assertFalse(station.isOverworkWarned());
-    GoldsmithCache.hitOvershootWarnPercent = 0;
-    assertFalse(station.markOverworkWarnedIfNeeded());
+    when(project.requiresGem()).thenReturn(true);
+    try (var validator = mockStatic(InfusedGemValidator.class)) {
+      validator.when(() -> InfusedGemValidator.isInfused(any())).thenReturn(true);
+      station.addGem(stack());
+      // No hits, too few and far too many all finish; the percent only sets the quality.
+      assertEquals(0, station.getHitPercent());
+      assertEquals(GoldsmithFeedback.SUCCESS, station.canFinish());
+      assertEquals(GoldsmithFeedback.WRONG_TYPE, station.hit(null));
+      assertEquals(GoldsmithFeedback.WRONG_TYPE, station.hit(mock(GoldsmithHit.class)));
+      assertEquals(GoldsmithFeedback.SUCCESS, station.hit(hit));
+      assertEquals(50, station.getHitPercent());
+      assertEquals(50, station.getFinishedTotal());
+      assertEquals(GoldsmithFeedback.SUCCESS, station.canFinish());
+      station.hit(hit);
+      assertEquals(100, station.getHitPercent());
+      station.hit(hit);
+      station.hit(hit);
+      assertEquals(4, station.getTotalHitCount());
+      assertEquals(4, station.getHitTypes().get(type).getCurrent());
+      assertEquals(0, station.getHitPercent());
+      assertEquals(GoldsmithFeedback.SUCCESS, station.canFinish());
+      for (int i = 0; i < 20; i++) station.hit(hit);
+      assertEquals(0, station.getHitPercent());
+      assertEquals(GoldsmithFeedback.SUCCESS, station.canFinish());
+    }
   }
 
   @Test
@@ -210,9 +200,8 @@ class GoldsmithStationTest {
       hl.when(() -> GoldsmithHitLoader.getByString("other")).thenReturn(other);
       hl.when(() -> GoldsmithHitLoader.getByString("untyped")).thenReturn(untyped);
       validator.when(() -> InfusedGemValidator.isInfused(gem)).thenReturn(true);
-      station.applySavedProgress(materials, hits, List.of(deposited), gem, true);
+      station.applySavedProgress(materials, hits, List.of(deposited), gem);
       assertSame(gem.clone(), station.getGem());
-      assertTrue(station.isOverworkWarned());
       assertEquals(100, station.getHitPercent());
       assertEquals(6, station.getTotalHitCount());
       assertEquals(2, station.getHitTypes().get(type).getCurrent());
@@ -221,12 +210,12 @@ class GoldsmithStationTest {
       station.getTypes().get("gold").setNeeded(2);
       assertEquals(GoldsmithFeedback.SUCCESS, station.addMaterial(material, null));
       assertEquals(2, station.getHitTypes().get(type).getCurrent());
-      station.applySavedProgress(null, null, null, null, false);
+      station.applySavedProgress(null, null, null, null);
       assertFalse(station.hasGem());
       assertTrue(station.getDeposited().isEmpty());
       assertEquals(0, station.getTotalHitCount());
       validator.when(() -> InfusedGemValidator.isInfused(gem)).thenReturn(false);
-      station.applySavedProgress(null, null, null, gem, false);
+      station.applySavedProgress(null, null, null, gem);
       assertFalse(station.hasGem());
       log.verify(() -> GoldsmithLog.warn(contains("Skipped restoring non-infused gem")));
     }
@@ -252,8 +241,8 @@ class GoldsmithStationTest {
     station.setProject(project);
     station.addMaterial(material, null);
     station.addMaterial(material, null);
-    // A wrong mix must not show before the work is done, or finishing becomes a free recipe check.
-    assertEquals(GoldsmithFeedback.LACKING_HITS, station.canFinish());
+    // An unworked piece can be finished, but it is ruined, so checking a mix still costs the gold.
+    assertEquals(GoldsmithFeedback.RUINED, station.canFinish());
     for (int i = 0; i < 4; i++) station.hit(hit);
     assertEquals(50, station.getRecipePercent());
     assertEquals(GoldsmithFeedback.RUINED, station.canFinish());
@@ -268,7 +257,7 @@ class GoldsmithStationTest {
     station.setProject(project);
     station.addMaterial(material, null);
     station.addMaterial(shiny, null);
-    assertEquals(GoldsmithFeedback.LACKING_HITS, station.canFinish());
+    assertEquals(GoldsmithFeedback.RUINED, station.canFinish());
     for (int i = 0; i < 3; i++) station.hit(hit);
     assertEquals(75, station.getHitPercent());
     assertEquals(GoldsmithFeedback.RUINED, station.canFinish());

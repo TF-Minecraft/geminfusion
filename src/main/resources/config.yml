@@ -6,23 +6,51 @@ locations:
 
 infusion_item: loot.infusion_token
 
-# Intelligence nudges the rolled gem stat (not rarity odds). 0.2 = 20% of the rolled value.
-attribute-influence:
-  mmocore-id: intelligence
-  floor: 0
-  neutral: 10
-  full: 20
-  max-bonus: 0.2
-  max-penalty: 0.2
-
-# Dexterity nudges the jewelry stat copied from the consumed gem. Independent of infusion Intelligence.
-jewelry-attribute-influence:
-  mmocore-id: dexterity
-  floor: 0
-  neutral: 10
-  full: 20
-  max-bonus: 0.2
-  max-penalty: 0.2
+# d20 rolls, like /roll: a d20 plus a modifier from the player's base attribute (gear does not count).
+# A natural 20 always gives the best result and a natural 1 always the worst, whatever the modifier.
+d20:
+  # Base attribute value -> modifier. Same as RPCharacters rolls.yml; values past the ends use the nearest end.
+  attribute-modifiers:
+    0: -5
+    1: -5
+    2: -4
+    3: -4
+    4: -3
+    5: -3
+    6: -2
+    7: -2
+    8: -1
+    9: -1
+    10: 0
+    11: 0
+    12: 1
+    13: 1
+    14: 2
+    15: 2
+    16: 3
+    17: 3
+    18: 4
+    19: 4
+    20: 5
+  # Infusion: each gem's roll picks its stat after its rarity is drawn. The roll is not shown to the player.
+  infusion:
+    attribute: intelligence
+    # A total of 1 or less gives the bottom of the spread, this total or more the top (a Flawless gem).
+    flawless-dc: 20
+    # How far the spread reaches past each rarity's min and max, in percent. Changing it moves the top,
+    # so gems that were Flawless stop counting as Flawless.
+    spread-percent: 20
+  # Goldsmithing: one craft roll when a gem piece is finished, shown to the crafter.
+  goldsmithing:
+    attribute: dexterity
+    # A Masterwork needs a 100% recipe, 100% hits, a Flawless gem and a total of at least this.
+    # Perfect work that misses becomes the tier below at its top stat carry.
+    masterwork-dc: 20
+    # Jewelry stat change for each point of the total above or below 10, and its cap, in percent.
+    percent-per-point: 2
+    max-percent: 20
+  # Dev testing only: 1-20 makes every roll that natural number. 0 rolls for real.
+  force-natural: 0
 
 rarities:
     common:

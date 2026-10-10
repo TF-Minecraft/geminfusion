@@ -18,13 +18,6 @@ public class GoldsmithConfigLoader {
 		if (GoldsmithCache.permission != null && GoldsmithCache.permission.isBlank()) {
 			GoldsmithCache.permission = null;
 		}
-		GoldsmithCache.minHitPercent = config.getDouble("min-hit-percent", 0.40);
-		GoldsmithCache.hitOvershootWarnPercent = config.getDouble("hit-overshoot-warn-percent", 30.0);
-		String overshootMessage = config.getString("hit-overshoot-warn-message");
-		if (overshootMessage == null || overshootMessage.isBlank()) {
-			overshootMessage = "§cYou have worked this piece too much";
-		}
-		GoldsmithCache.hitOvershootWarnMessage = overshootMessage;
 		GoldsmithCache.jewelryGemStatBoost = Math.max(0,
 				config.getDouble("jewelry-gem-stat-boost.amount", 10.0));
 		Map<String, Double> chances = new HashMap<>();

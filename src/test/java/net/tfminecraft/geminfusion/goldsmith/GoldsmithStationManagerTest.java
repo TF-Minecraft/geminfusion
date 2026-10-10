@@ -212,7 +212,7 @@ class GoldsmithStationManagerTest {
   }
 
   @Test
-  void brandingShowsOnlyGoldAndGemProgressWithoutSpoilers() {
+  void brandingShowsGoldGemAndHitsDoneWithoutSpoilers() {
     manager.put(station);
     branding(true);
     when(project.requiresGem()).thenReturn(true);
@@ -222,22 +222,85 @@ class GoldsmithStationManagerTest {
     counter.setCurrent(1);
     when(station.getTypes()).thenReturn(Map.of("gold", counter));
     manager.onInteract(click(Action.RIGHT_CLICK_BLOCK));
-    verify(player).sendMessage("§7gem: §e1/1");
-    // Recipe and hit progress are for the player to work out; status must not reveal them.
+    verify(player).sendMessage("§bGem§7: §e1/1");
+    verify(player).sendMessage("§7Hits done:");
+    verify(player).sendMessage("§7Total: §e0");
+    // The mix and needed hits are for the player to work out; status must not reveal them.
     verify(station, never()).getRecipePercent();
     verify(station, never()).getHitPercent();
-    verify(station, never()).getHits();
+    verify(station, never()).getTotalHitNeeded();
     verify(station, never()).getDepositedByMaterial();
     verify(player, never()).sendMessage(contains("Recipe"));
-    verify(player, never()).sendMessage(contains("Hit"));
+    verify(player, never()).sendMessage(contains("SHIFT + RIGHT"));
     reset();
     when(station.hasGem()).thenReturn(false);
     manager.onInteract(click(Action.RIGHT_CLICK_BLOCK));
-    verify(player).sendMessage("§7gem: §e0/1");
+    verify(player).sendMessage("§bGem§7: §e0/1");
     reset();
     when(project.requiresGem()).thenReturn(false);
     manager.onInteract(click(Action.RIGHT_CLICK_BLOCK));
     verify(player, times(3)).sendMessage("§7Project: Ring");
+  }
+
+  @Test
+  void brandingListsHitsDoneForEveryToolWithoutNeededCountsSneakingOrNot() {
+    manager.put(station);
+    branding(true);
+    IntCounter gold = new IntCounter();
+    gold.setNeeded(4);
+    gold.setCurrent(4);
+    when(station.getTypes()).thenReturn(Map.of("gold", gold));
+    GoldsmithHit hammer = mock(GoldsmithHit.class), small = mock(GoldsmithHit.class);
+    GoldsmithHit tinker = mock(GoldsmithHit.class), stale = mock(GoldsmithHit.class);
+    when(hammer.getId()).thenReturn("hit");
+    when(hammer.getName()).thenReturn("§7Hit");
+    when(small.getId()).thenReturn("small_hit");
+    when(small.getName()).thenReturn("§7Small Hit");
+    when(tinker.getId()).thenReturn("tinker");
+    when(tinker.getName()).thenReturn("§7Tinker");
+    // A hit object from before a reload still counts under its id.
+    when(stale.getId()).thenReturn("hit");
+    LinkedHashMap<String, GoldsmithHit> all = new LinkedHashMap<>();
+    all.put("hit", hammer);
+    all.put("small_hit", small);
+    all.put("tinker", tinker);
+    hits.when(GoldsmithHitLoader::get).thenReturn(all);
+    IntCounter three = new IntCounter(), two = new IntCounter(), one = new IntCounter();
+    three.setCurrent(3);
+    three.setNeeded(8);
+    two.setCurrent(2);
+    one.setCurrent(1);
+    Map<GoldsmithHit, IntCounter> done = new LinkedHashMap<>();
+    done.put(hammer, three);
+    done.put(small, two);
+    done.put(stale, one);
+    when(station.getHits()).thenReturn(done);
+    when(station.getTotalHitCount()).thenReturn(6);
+    List<String> expected =
+        List.of(
+            "§7Project: Ring",
+            // Other tests may have loaded the gold type, so take its display name from the loader.
+            GoldsmithMaterialTypeLoader.display("gold") + "§7: §e4/4",
+            "§7Hits done:",
+            "§7Hit§7: §e4",
+            "§7Small Hit§7: §e2",
+            "§7Tinker§7: §e0",
+            "§7Total: §e6",
+            "§7Left-click branding to finish",
+            "§cSHIFT + LEFT CLICK with the branding tool to cancel the project!");
+    // Sneaking or not, a mid-project branding right-click shows the same progress.
+    for (boolean sneaking : List.of(false, true)) {
+      clearInvocations(player);
+      reset();
+      when(player.isSneaking()).thenReturn(sneaking);
+      manager.onInteract(click(Action.RIGHT_CLICK_BLOCK));
+      ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
+      verify(player, atLeastOnce()).sendMessage(sent.capture());
+      assertEquals(expected, sent.getAllValues());
+    }
+    verify(station, never()).getTotalHitNeeded();
+    verify(station, never()).getHitPercent();
+    verify(station, never()).getRecipePercent();
   }
 
   @Test
@@ -290,7 +353,7 @@ class GoldsmithStationManagerTest {
   }
 
   @Test
-  void toolHitsReportProgressWarningsAndFeedback() {
+  void toolHitsReportProgressAndFeedback() {
     GoldsmithHit hit = mock(GoldsmithHit.class);
     hits.when(() -> GoldsmithHitLoader.getByItem(hand)).thenReturn(hit);
     manager.onInteract(click(Action.LEFT_CLICK_BLOCK));
@@ -302,16 +365,16 @@ class GoldsmithStationManagerTest {
     for (GoldsmithFeedback feedback : GoldsmithFeedback.values()) {
       reset();
       when(station.hit(hit)).thenReturn(feedback);
-      when(station.markOverworkWarnedIfNeeded()).thenReturn(feedback == GoldsmithFeedback.SUCCESS);
       manager.onInteract(click(Action.LEFT_CLICK_BLOCK));
     }
     verify(player).sendMessage("§cYou have to add all the gold before working");
     reset();
     when(station.hit(hit)).thenReturn(GoldsmithFeedback.SUCCESS);
-    when(station.markOverworkWarnedIfNeeded()).thenReturn(false);
     manager.onInteract(click(Action.LEFT_CLICK_BLOCK));
     manager.onInteract(click(Action.LEFT_CLICK_BLOCK));
     verify(station, times(GoldsmithFeedback.values().length + 1)).hit(hit);
+    // Working a piece gives no advice beyond the hit count; only the finish shows percents.
+    verify(player, never()).sendMessage(contains("worked this piece"));
   }
 
   @Test
@@ -360,9 +423,7 @@ class GoldsmithStationManagerTest {
     branding(true);
     for (GoldsmithFeedback feedback :
         List.of(
-            GoldsmithFeedback.LACKING_ITEMS,
-            GoldsmithFeedback.LACKING_HITS,
-            GoldsmithFeedback.NOT_INFUSED)) {
+            GoldsmithFeedback.LACKING_ITEMS, GoldsmithFeedback.NOT_INFUSED)) {
       reset();
       when(station.canFinish()).thenReturn(feedback);
       manager.onInteract(click(Action.LEFT_CLICK_BLOCK));
@@ -395,8 +456,12 @@ class GoldsmithStationManagerTest {
         reset();
         // Gem-free projects (keys) have no quality and no stat carry line.
         when(project.requiresGem()).thenReturn(chosen != null);
+        // Gem pieces carry the goldsmith's craft roll; gem-free ones have none.
         JewelryCraftResult result =
-            new JewelryCraftResult(new ItemStack(Material.DIAMOND), 90, 80, 80, 60, chosen);
+            chosen == null
+                ? new JewelryCraftResult(new ItemStack(Material.DIAMOND), 90, 80, 80, 60, null)
+                : new JewelryCraftResult(
+                    new ItemStack(Material.DIAMOND), 90, 80, 80, 60, chosen, new D20Roll(17, 3));
         output.when(() -> JewelryOutput.build(station, player)).thenReturn(result);
         manager.onInteract(click(Action.LEFT_CLICK_BLOCK));
         assertNull(manager.get(loc));
@@ -405,6 +470,7 @@ class GoldsmithStationManagerTest {
       verify(station, times(2)).cancel();
       verify(player).sendMessage("§7Quality: Fine");
       verify(player).sendMessage("§7Stat carry: §e60%");
+      verify(player).sendMessage("§7Craft roll: §e17 §7(+3) = §e20");
     }
   }
 

@@ -22,7 +22,6 @@ public class GoldsmithStation {
 	private final LinkedHashMap<GoldsmithHitType, IntCounter> hitTypes = new LinkedHashMap<>();
 	private final List<ItemStack> deposited = new ArrayList<>();
 	private final LinkedHashMap<GoldsmithMaterial, Integer> depositedByMaterial = new LinkedHashMap<>();
-	private boolean overworkWarned;
 
 	public GoldsmithStation(Location loc) {
 		this.loc = loc;
@@ -80,27 +79,6 @@ public class GoldsmithStation {
 		return GoldsmithMath.totalHitNeeded(GoldsmithMath.requiredHits(depositedByMaterial));
 	}
 
-	public boolean isOverworkWarned() {
-		return overworkWarned;
-	}
-
-	/**
-	 * Marks the bench after the first swing that exceeds the configured overwork threshold.
-	 * @return true when this call should send the hint
-	 */
-	public boolean markOverworkWarnedIfNeeded() {
-		if (overworkWarned) return false;
-		double warn = GoldsmithCache.hitOvershootWarnPercent;
-		if (warn <= 0) return false;
-		int needed = getTotalHitNeeded();
-		if (needed <= 0) return false;
-		if (getTotalHitCount() > needed * (1.0 + warn / 100.0)) {
-			overworkWarned = true;
-			return true;
-		}
-		return false;
-	}
-
 	public double getRecipePercent() {
 		return GoldsmithMath.recipePercent(project, depositedByMaterial);
 	}
@@ -116,7 +94,6 @@ public class GoldsmithStation {
 		hitTypes.clear();
 		deposited.clear();
 		depositedByMaterial.clear();
-		overworkWarned = false;
 		gem = null;
 		if (project == null) return;
 
@@ -132,7 +109,7 @@ public class GoldsmithStation {
 	 * Needed values stay on the live project; only currents, deposited stacks, and gem are restored.
 	 */
 	public void applySavedProgress(Map<String, Integer> materials, Map<String, Integer> hitCounts,
-			List<ItemStack> savedDeposited, ItemStack savedGem, boolean savedOverworkWarned) {
+			List<ItemStack> savedDeposited, ItemStack savedGem) {
 		deposited.clear();
 		depositedByMaterial.clear();
 		gem = null;
@@ -165,7 +142,6 @@ public class GoldsmithStation {
 			}
 			syncHitTypeCurrents();
 		}
-		overworkWarned = savedOverworkWarned;
 		if (savedDeposited != null) {
 			deposited.addAll(savedDeposited);
 		}
@@ -248,7 +224,7 @@ public class GoldsmithStation {
 			return GoldsmithFeedback.NOT_INFUSED;
 		}
 		if (!checkItems()) return GoldsmithFeedback.LACKING_ITEMS;
-		if (!GoldsmithMath.meetsMinHitPercent(getHitPercent())) return GoldsmithFeedback.LACKING_HITS;
+		// Any number of hits can be finished; the hit percent only sets the quality.
 		// Gem-free pieces have no quality to lose, so anything short of a perfect recipe and hits ruins them.
 		// Hits with tools the piece does not need are only in the total, so compare it too.
 		if (!project.requiresGem()
@@ -268,7 +244,6 @@ public class GoldsmithStation {
 		hitTypes.clear();
 		deposited.clear();
 		depositedByMaterial.clear();
-		overworkWarned = false;
 		return refund;
 	}
 
